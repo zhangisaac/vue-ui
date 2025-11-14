@@ -1,0 +1,26 @@
+{
+  "name": "workflow-bpmn-frontend",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "pinia": "^2.1.7",
+    "vue": "^3.5.13",
+    "vue-router": "^4.2.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@vitejs/plugin-vue": "^4.4.0",
+    "typescript": "^5.2.2",
+    "vite": "^4.4.9",
+    "vue-tsc": "^1.8.22"
+  }
+}
+
+
