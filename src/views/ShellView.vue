@@ -3,7 +3,7 @@
     <aside class="sidebar">
       <div class="brand">
         <span class="logo">WF</span>
-        <h2>Workflow Hub</h2>
+        <h2><p class="user">{{ auth.username }}</p></h2>
       </div>
       <nav>
         <RouterLink to="/" exact-active-class="active">My Tasks</RouterLink>
@@ -13,7 +13,7 @@
         </RouterLink>
       </nav>
       <footer>
-        <p class="user">{{ auth.username }}</p>
+        
         <button type="button" @click="handleLogout">Sign out</button>
       </footer>
     </aside>
