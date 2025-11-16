@@ -61,6 +61,13 @@ router.beforeEach(async (to, from, next) => {
   if (!initialized) {
     await auth.initialize();
     initialized = true;
+    
+    // Listen for auth logout events (triggered when token refresh fails)
+    window.addEventListener('auth:logout', () => {
+      if (router.currentRoute.value.name !== 'login') {
+        router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } });
+      }
+    });
   }
 
   if (to.meta.public) {
