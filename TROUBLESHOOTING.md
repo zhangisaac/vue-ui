@@ -151,10 +151,74 @@ npm run dev
 4. **CSRF enabled**: Disable CSRF for `/api/**` endpoints
 5. **Login endpoint protected**: `/api/auth/login` must be `permitAll()`
 
-### Still Having Issues?
+---
 
-1. Check backend logs for detailed error messages
-2. Check browser Network tab to see the actual request/response
-3. Verify the backend endpoint path matches exactly: `/api/auth/login`
-4. Ensure the request body format matches what the backend expects
+## Problem: 403 Forbidden Error on Logout
+
+### Symptoms
+- Clicking "Sign off" returns `403 Forbidden` for `POST /api/auth/logout`
+- You may need to click twice to complete logout
+
+### Causes
+- Access token is already expired or cleared, so backend rejects the logout request
+- Logout error logging in the client makes this noisy in console
+
+### Frontend Behavior (By Design)
+- Client skips backend logout if access token is missing or expired
+- Client clears local tokens in all cases and redirects to login immediately
+- Errors from `/auth/logout` are suppressed in the console
+
+### What to Do
+- No action needed if you see `403` during logout; the client has already cleared session and redirected
+- If the backend must always record logout, ensure the access token is still valid when calling logout
+
+---
+
+## Problem: Duplicate `/api/api` in URL (e.g., /api/api/auth/refresh)
+
+### Cause
+- Using an absolute `/api/...` path with an axios instance that already has `baseURL: '/api'`
+
+### Fix
+- Use the shared axios client and relative path (e.g., `apiClient.post('/auth/refresh', ...)`)
+
+---
+
+## Problem: Token Refresh Fails Intermittently
+
+### Symptoms
+- Occasional 401 immediately before refresh
+- Refresh succeeds locally but still shows token "expired" behavior
+
+### Causes
+- Client and server clocks are out of sync
+
+### Fix (Implemented)
+- Client adjusts for server time using the HTTP `Date` header
+- Expiry checks use: `now = Date.now() + serverTimeOffsetMs` with a 60s safety buffer
+
+### Verify
+- In Network tab, inspect any API response headers and ensure `Date` is present
+- Refresh should occur proactively within ~60s of access token expiry (server time)
+
+---
+
+## Problem: Still Seeing 401 After Refresh
+
+### Causes
+- Refresh token is expired or revoked (blacklisted on backend)
+
+### Behavior
+- Client clears tokens and dispatches `auth:logout`, router redirects to login
+
+### What to Do
+- Login again; if this persists, validate refresh token policies on backend
+
+---
+
+## Quick Checks
+- Confirm requests go to `/api/auth/...` (not `/api/api/...`)
+- Ensure Vite proxy is running and backend is reachable on 8080
+- Verify `Authorization: Bearer <accessToken>` header is present for protected endpoints
+- Check that localStorage has: `accessToken`, `tokenExpiresAt`, `refreshToken`, `refreshTokenExpiresAt`
 

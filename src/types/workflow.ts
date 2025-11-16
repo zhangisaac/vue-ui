@@ -1,9 +1,15 @@
 export interface LoginResponse {
   tokenType: string;
   accessToken: string;
+  refreshToken: string;
   expiresAt: string;
+  refreshExpiresAt: string;
   username: string;
   roles: string[];
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string;
 }
 
 export interface Task {

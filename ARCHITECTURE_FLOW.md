@@ -70,16 +70,16 @@ flowchart LR
         J -->|API: CSRF Disabled| K[Controller<br/>/api/auth/login]
         J -->|CSRF Required| L[❌ 403 Forbidden]
         K -->|8. Process| M[Auth Service<br/>Validate Credentials]
-        M -->|Success| N[Generate JWT Token]
+        M -->|Success| N[Generate Access Token<br/>+ Refresh Token]
         M -->|Failure| O[❌ 401 Unauthorized]
-        N -->|9. Response| P[JSON Response<br/>+ CORS Headers]
+        N -->|9. Response| P[JSON Response<br/>accessToken + refreshToken<br/>+ CORS Headers]
     end
 
     subgraph Response["↩️ Response Path"]
         P -->|10. Add CORS Headers| Q[Access-Control-Allow-Origin<br/>Allow-Credentials]
         Q -->|11. Through Proxy| R[Vite Proxy<br/>Log Response]
         R -->|12. To Browser| S[Axios Interceptor<br/>Check Status]
-        S -->|13. Save Token| T[localStorage]
+        S -->|13. Save Tokens| T[localStorage<br/>accessToken + refreshToken<br/>expiresAt + refreshExpiresAt]
         T -->|14. Update UI| A
     end
 
@@ -403,6 +403,163 @@ graph LR
     style G fill:#6db33f,color:#fff
 ```
 
+## Token Refresh Flow
+
+This diagram shows how automatic token refresh works when access tokens expire or are about to expire:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Component as Vue Component
+    participant Axios as Axios Interceptor<br/>(Request)
+    participant API as API Service<br/>(api.ts)
+    participant Backend as Spring Boot<br/>/api/auth/refresh
+    participant Store as Auth Store
+
+    Note over Component,Store: Proactive Token Refresh (Before Expiry)
+    Component->>Axios: API Request
+    Axios->>Axios: Check Token Expiry<br/>(expiresAt - 1min)
+    alt Token Expired or About to Expire
+        Axios->>API: refreshAccessToken()
+        API->>Backend: POST /api/auth/refresh<br/>{refreshToken}
+        Backend->>Backend: Validate Refresh Token<br/>RefreshTokenService
+        alt Refresh Token Valid
+            Backend->>API: New LoginResponse<br/>(accessToken, refreshToken)
+            API->>API: Store New Tokens<br/>in localStorage
+            API->>Axios: Return New Access Token
+            Axios->>Component: Retry Request<br/>with New Token
+        else Refresh Token Invalid/Expired
+            Backend->>API: 401/400 Error
+            API->>API: Clear All Tokens
+            API->>Store: Dispatch 'auth:logout' Event
+            Store->>Store: Clear Auth State
+            Component->>Component: Redirect to Login
+        end
+    else Token Still Valid
+        Axios->>Component: Proceed with Request
+    end
+
+    Note over Component,Store: Reactive Token Refresh (On 401 Error)
+    Component->>Axios: API Request
+    Axios->>Backend: Request with Access Token
+    Backend->>Backend: Check Blacklist<br/>TokenBlacklistService
+    alt Token Blacklisted or Expired
+        Backend->>Axios: 401 Unauthorized
+        Axios->>API: Try refreshAccessToken()
+        API->>Backend: POST /api/auth/refresh
+        alt Refresh Success
+            API->>Axios: New Access Token
+            Axios->>Backend: Retry Original Request<br/>with New Token
+            Backend->>Axios: 200 OK Response
+            Axios->>Component: Success
+        else Refresh Failed
+            API->>API: Clear All Tokens
+            API->>Store: Dispatch 'auth:logout' Event
+            Store->>Store: Clear Auth State
+            Component->>Component: Redirect to Login
+        end
+    end
+```
+
+## Token Blacklisting Flow
+
+This diagram shows how token blacklisting works during logout and subsequent request validation:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User
+    participant Component as Vue Component
+    participant Store as Auth Store
+    participant API as API Service<br/>(api.ts)
+    participant Backend as Spring Boot<br/>/api/auth/logout
+    participant Blacklist as TokenBlacklistService
+    participant RefreshToken as RefreshTokenService
+
+    Note over User,RefreshToken: Logout Flow - Blacklist Token
+    User->>Component: Click Logout
+    Component->>Store: logout()
+    Store->>API: apiLogout(refreshToken)
+    API->>Backend: POST /api/auth/logout<br/>Authorization: Bearer {accessToken}<br/>Body: {refreshToken}
+    Backend->>Blacklist: blacklistToken(accessToken, expiresAt)
+    Blacklist->>Blacklist: Store in blacklist map
+    Backend->>RefreshToken: revokeRefreshToken(refreshToken)
+    RefreshToken->>RefreshToken: Remove from storage
+    Backend->>API: 200 OK
+    API->>API: clearTokens()<br/>Remove from localStorage
+    API->>Store: Clear auth state
+    Component->>User: Redirect to Login
+
+    Note over User,RefreshToken: Subsequent Request with Blacklisted Token
+    User->>Component: Make API Request
+    Component->>Backend: Request with Blacklisted Token
+    Backend->>Backend: JwtTokenProvider.validateToken()
+    Backend->>Blacklist: isTokenBlacklisted(token)
+    Blacklist->>Blacklist: Check if token in blacklist
+    alt Token in Blacklist
+        Blacklist->>Backend: true (token blacklisted)
+        Backend->>Component: 401 Unauthorized<br/>(Token validation fails)
+        Component->>API: Try refresh token
+        Note over Component,RefreshToken: Refresh will fail<br/>since refresh token was revoked
+        API->>Component: Refresh failed
+        Component->>Component: Clear tokens and redirect to login
+    else Token Not Blacklisted
+        Blacklist->>Backend: false (token valid)
+        Backend->>Component: Process request normally
+    end
+```
+
+## Token Refresh and Blacklisting Architecture
+
+```mermaid
+flowchart TB
+    subgraph Frontend["🌐 Frontend - Token Management"]
+        A[Axios Request Interceptor] -->|Check Expiry| B{Token Expired?<br/>expiresAt - 1min}
+        B -->|Yes| C[Call Refresh Endpoint]
+        B -->|No| D[Use Current Token]
+        C -->|Success| E[Store New Tokens<br/>localStorage]
+        C -->|Failure| F[Clear Tokens<br/>Dispatch Logout Event]
+        E --> D
+        F --> G[Redirect to Login]
+    end
+
+    subgraph Backend["☕ Backend - Token Services"]
+        H[/api/auth/refresh<br/>POST] --> I[RefreshTokenService<br/>Validate Refresh Token]
+        I -->|Valid| J[Generate New Access Token<br/>+ Optional New Refresh Token]
+        I -->|Invalid| K[❌ 401 Unauthorized]
+        J --> L[Return LoginResponse]
+        
+        M[/api/auth/logout<br/>POST] --> N[TokenBlacklistService<br/>Blacklist Access Token]
+        M --> O[RefreshTokenService<br/>Revoke Refresh Token]
+        N --> P[Store in Blacklist Map]
+        O --> Q[Remove from Storage]
+    end
+
+    subgraph Validation["🔒 Token Validation"]
+        R[API Request] --> S[JwtTokenProvider<br/>validateToken]
+        S --> T{Check Blacklist<br/>TokenBlacklistService}
+        T -->|Blacklisted| U[❌ 401 Unauthorized]
+        T -->|Not Blacklisted| V{Check Expiry<br/>JWT Claims}
+        V -->|Expired| U
+        V -->|Valid| W[✅ Allow Request]
+    end
+
+    D --> R
+    L --> E
+    U --> X[Frontend: Try Refresh]
+    X --> C
+    
+    style A fill:#42b983,color:#fff
+    style H fill:#6db33f,color:#fff
+    style M fill:#6db33f,color:#fff
+    style I fill:#ffa726,color:#000
+    style N fill:#ffa726,color:#000
+    style T fill:#ffa726,color:#000
+    style F fill:#ef5350,color:#fff
+    style K fill:#ef5350,color:#fff
+    style U fill:#ef5350,color:#fff
+```
+
 ## Error Handling
 
 ### Common Errors and Solutions
@@ -416,8 +573,8 @@ graph LR
    - Solution: Add origin to `allowedOrigins` in `CorsConfig`
 
 3. **401 Unauthorized**
-   - Cause: Invalid credentials or expired token
-   - Solution: Re-authenticate or refresh token
+   - Cause: Invalid credentials, expired token, or blacklisted token
+   - Solution: Frontend automatically attempts token refresh. If refresh fails, user is logged out and redirected to login page
 
 4. **Network Error**
    - Cause: Backend not running or proxy misconfiguration
