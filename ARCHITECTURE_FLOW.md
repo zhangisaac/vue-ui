@@ -580,16 +580,274 @@ flowchart TB
    - Cause: Backend not running or proxy misconfiguration
    - Solution: Check backend on port 8080 and proxy config
 
+## E2E Testing Architecture
+
+This diagram shows how E2E tests are integrated into the development and CI/CD workflow:
+
+```mermaid
+flowchart TB
+    subgraph Local["🖥️ Local Development"]
+        A[Developer] -->|npm run test:all| B[Test Runner Script<br/>run-all-tests.sh]
+        B -->|1. Run Unit Tests| C[Vitest<br/>Unit + Component Tests]
+        C -->|2. Start Dev Server| D[Vite Dev Server<br/>localhost:5173]
+        D -->|3. Run E2E Tests| E[Cypress<br/>E2E Test Suite]
+        E -->|4. Stop Dev Server| F[Test Results]
+        F -->|Show Results| A
+    end
+    
+    subgraph CI["☁️ CI/CD Pipeline (GitHub Actions)"]
+        G[Git Push/PR] -->|Trigger| H[GitHub Actions Workflow<br/>.github/workflows/ci.yml]
+        H -->|1. Setup Environment| I[Node.js 20<br/>Install Dependencies]
+        I -->|2. Run Unit Tests| J[Vitest with Coverage<br/>Upload to Codecov]
+        J -->|3. Start Dev Server| K[Vite Dev Server<br/>Background Process]
+        K -->|4. Wait for Ready| L[Health Check<br/>curl localhost:5173]
+        L -->|5. Run E2E Tests| M[Cypress Headless<br/>cy:run]
+        M -->|6. Stop Dev Server| N[Cleanup Process]
+        N -->|7. Type Check| O[TypeScript Validation]
+        O -->|Report Results| P[GitHub Actions UI]
+    end
+    
+    subgraph E2ETests["🧪 E2E Test Scenarios"]
+        Q[Authentication Flow] -->|Login, Errors, Redirects| E
+        R[Token Management] -->|Refresh, Expiry, Blacklist| E
+        S[Route Protection] -->|Auth Guards, Admin Routes| E
+        T[Clock Skew] -->|Server Time Adjustment| E
+    end
+    
+    style A fill:#42b983,color:#fff
+    style B fill:#646cff,color:#fff
+    style C fill:#42b983,color:#fff
+    style D fill:#646cff,color:#fff
+    style E fill:#00d9ff,color:#000
+    style G fill:#24292e,color:#fff
+    style H fill:#24292e,color:#fff
+    style M fill:#00d9ff,color:#000
+    style Q fill:#00d9ff,color:#000
+    style R fill:#00d9ff,color:#000
+    style S fill:#00d9ff,color:#000
+    style T fill:#00d9ff,color:#000
+```
+
+## E2E Test Execution Flow
+
+This diagram shows the detailed flow of E2E test execution:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Dev as Developer/CI
+    participant Script as Test Script<br/>run-all-tests.sh
+    participant Vitest as Vitest<br/>Unit Tests
+    participant Vite as Vite Dev Server
+    participant Cypress as Cypress<br/>E2E Tests
+    participant Browser as Test Browser<br/>(Headless/UI)
+    participant Backend as Backend API<br/>(Optional)
+
+    Dev->>Script: npm run test:all
+    Script->>Vitest: Run unit/component tests
+    Vitest->>Vitest: Execute test suites
+    Vitest-->>Script: ✓ Unit tests passed
+    
+    Script->>Vite: Start dev server (npm run dev &)
+    Vite->>Vite: Initialize on port 5173
+    Vite-->>Script: Server ready
+    
+    Script->>Cypress: Run E2E tests (cy:run)
+    Cypress->>Browser: Launch test browser
+    Browser->>Vite: Navigate to localhost:5173
+    Vite->>Browser: Serve Vue application
+    
+    loop E2E Test Suite
+        Browser->>Browser: Execute test steps
+        Browser->>Vite: API requests (/api/**)
+        Vite->>Backend: Proxy to localhost:8080
+        Backend-->>Vite: API responses
+        Vite-->>Browser: Forward responses
+        Browser->>Browser: Assertions & validations
+    end
+    
+    Browser-->>Cypress: Test results
+    Cypress-->>Script: ✓ E2E tests passed
+    
+    Script->>Vite: Stop dev server (pkill)
+    Vite-->>Script: Server stopped
+    
+    Script-->>Dev: All tests completed ✓
+```
+
+## Test Coverage Architecture
+
+This diagram shows how different test types cover the application:
+
+```mermaid
+graph TB
+    subgraph App["📱 Application Layers"]
+        A[Vue Components<br/>Views, UI]
+        B[Pinia Stores<br/>State Management]
+        C[API Services<br/>Axios, Interceptors]
+        D[Router<br/>Navigation Guards]
+    end
+    
+    subgraph UnitTests["🔬 Unit Tests (Vitest)"]
+        E[Component Tests<br/>LoginView.spec.ts]
+        F[Store Tests<br/>auth.store.spec.ts]
+        G[Service Tests<br/>api.spec.ts]
+    end
+    
+    subgraph E2ETests["🌐 E2E Tests (Cypress)"]
+        H[Authentication Flow<br/>auth.cy.ts]
+        I[Token Management<br/>token-refresh.cy.ts<br/>token-blacklist.cy.ts]
+        J[Route Protection<br/>routes.cy.ts]
+        K[User Flows<br/>logout.cy.ts<br/>clock-skew.cy.ts]
+    end
+    
+    A -->|Tested by| E
+    A -->|Tested by| H
+    B -->|Tested by| F
+    B -->|Tested by| I
+    C -->|Tested by| G
+    C -->|Tested by| I
+    D -->|Tested by| J
+    
+    style A fill:#42b983,color:#fff
+    style B fill:#42b983,color:#fff
+    style C fill:#42b983,color:#fff
+    style D fill:#42b983,color:#fff
+    style E fill:#ffa726,color:#000
+    style F fill:#ffa726,color:#000
+    style G fill:#ffa726,color:#000
+    style H fill:#00d9ff,color:#000
+    style I fill:#00d9ff,color:#000
+    style J fill:#00d9ff,color:#000
+    style K fill:#00d9ff,color:#000
+```
+
 ## Development vs Production
 
 ### Development (Current Setup)
 - Vite dev server on port 5173
 - Proxy forwards `/api/*` to `http://localhost:8080`
 - CORS enabled for development
+- **E2E tests**: Run locally with `npm run test:all` or `npm run cy:open`
 
 ### Production (Recommended)
 - Frontend served from same domain as backend (no CORS needed)
 - Or: Configure CORS for production domain
 - Use nginx or similar reverse proxy
 - Consider API Gateway pattern for microservices
+- **E2E tests**: Run in CI/CD pipeline (GitHub Actions)
+
+## Testing Integration
+
+### Local Testing
+- **Command**: `npm run test:all`
+- **Process**: Unit tests → Start dev server → E2E tests → Stop server
+- **Coverage**: 83.96% statements, 100% pass rate
+- **Quality**: SonarLint in VSCode for real-time feedback
+
+### CI/CD Testing
+- **Trigger**: Push/PR to `main` or `develop`
+- **Process**: 
+  1. Check manifest versions
+  2. Run Vulnerability Assessment (npm audit)
+  3. Run linting (ESLint)
+  4. Unit tests with coverage
+  5. Upload coverage to Codecov
+  6. Start dev server
+  7. Run E2E tests
+  8. Type check
+  9. **SonarCloud analysis** with quality gate
+- **Reports**: 
+  - Coverage uploaded to Codecov
+  - Quality metrics in SonarCloud dashboard
+  - Results in GitHub Actions UI
+
+**See [TESTING.md](./TESTING.md) for complete testing guide including CI/CD integration.**
+
+## SonarCloud Integration Architecture
+
+This diagram shows how SonarCloud integrates with the development workflow:
+
+```mermaid
+flowchart TB
+    subgraph Local["🖥️ Local Development"]
+        A[Developer] -->|Write Code| B[VSCode IDE]
+        B -->|SonarLint| C[Real-time Quality Feedback]
+        B -->|ESLint| D[Code Style Checking]
+        A -->|npm run sonar:local| E[Local SonarCloud Analysis]
+        E -->|Upload Results| F[SonarCloud Dashboard]
+    end
+    
+    subgraph CI["☁️ CI/CD Pipeline"]
+        G[Git Push] -->|Trigger| H[GitHub Actions]
+        H -->|1. Run Tests| I[Vitest + Coverage]
+        H -->|2. Run Linting| J[ESLint]
+        H -->|3. Run VA| K[npm audit]
+        H -->|4. SonarCloud Scan| L[SonarCloud Scanner]
+        I -->|LCOV Report| L
+        J -->|Lint Results| L
+        K -->|VA Results| L
+        L -->|Upload Analysis| F
+    end
+    
+    subgraph Dashboard["📊 SonarCloud Dashboard"]
+        F -->|Quality Metrics| M[Overview]
+        F -->|Security Issues| N[Security Tab]
+        F -->|Coverage Data| O[Measures Tab]
+        F -->|VA Issues| P[Vulnerability Assessment]
+        F -->|Manifest Issues| Q[Manifest Analysis]
+        F -->|SBT Issues| R[Build Analysis]
+        F -->|Quality Gate| S[Pass/Fail Status]
+    end
+    
+    subgraph Quality["🔒 Quality Gates"]
+        S -->|Fail| T[Block Merge/Deploy]
+        S -->|Pass| U[Allow Merge/Deploy]
+    end
+    
+    style A fill:#42b983,color:#fff
+    style B fill:#646cff,color:#fff
+    style H fill:#24292e,color:#fff
+    style L fill:#00d9ff,color:#000
+    style F fill:#4e9a06,color:#fff
+    style S fill:#ffa726,color:#000
+    style T fill:#ef5350,color:#fff
+    style U fill:#66bb6a,color:#fff
+```
+
+## SonarCloud Quality Metrics Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Dev as Developer
+    participant VSCode as VSCode<br/>(SonarLint)
+    participant Local as Local Analysis<br/>(sonar-scanner)
+    participant CI as CI/CD<br/>(GitHub Actions)
+    participant SonarCloud as SonarCloud<br/>Dashboard
+    participant QualityGate as Quality Gate
+
+    Dev->>VSCode: Write/Edit Code
+    VSCode->>VSCode: SonarLint Analysis<br/>(Real-time)
+    VSCode->>Dev: Show Issues in IDE
+    
+    Dev->>Local: npm run sonar:local
+    Local->>Local: Generate Coverage
+    Local->>SonarCloud: Upload Analysis
+    SonarCloud->>SonarCloud: Process Results
+    SonarCloud->>Dev: Show Dashboard
+    
+    Dev->>CI: git push
+    CI->>CI: Run Tests + Coverage
+    CI->>CI: Run ESLint
+    CI->>CI: Run npm audit (VA)
+    CI->>SonarCloud: Upload Analysis
+    SonarCloud->>SonarCloud: Process Results
+    SonarCloud->>QualityGate: Check Quality Gate
+    QualityGate->>CI: Pass/Fail
+    CI->>Dev: Merge Allowed/Blocked
+    SonarCloud->>Dev: Dashboard Updated
+```
+
+**See [SONARCLOUD.md](./SONARCLOUD.md) for complete SonarCloud guide.**
 

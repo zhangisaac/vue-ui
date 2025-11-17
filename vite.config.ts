@@ -9,6 +9,17 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['tests/setupTests.ts'],
+    coverage: {
+      provider: 'v8',
+      reportsDirectory: './coverage',
+      reporter: ['text', 'lcov', 'html'],
+      include: ['src/**/*.{ts,tsx,vue}'],
+    },
+  },
   server: {
     port: 5173,
     proxy: {

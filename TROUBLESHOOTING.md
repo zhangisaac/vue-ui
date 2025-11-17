@@ -222,3 +222,125 @@ npm run dev
 - Verify `Authorization: Bearer <accessToken>` header is present for protected endpoints
 - Check that localStorage has: `accessToken`, `tokenExpiresAt`, `refreshToken`, `refreshTokenExpiresAt`
 
+---
+
+## Problem: E2E Tests Failing
+
+### Symptoms
+- E2E tests fail with "Cypress could not verify that this server is running"
+- Tests timeout waiting for elements
+- Tests fail with network errors
+
+### Solutions
+
+#### 1. Dev Server Not Running
+**Problem**: Vite dev server is not running on port 5173
+
+**Solution**: Use integrated test runner (recommended)
+```bash
+npm run test:all
+```
+
+Or manually start dev server:
+```bash
+npm run dev
+# In another terminal
+npm run cy:run
+```
+
+#### 2. Backend Not Available
+**Problem**: E2E tests require backend for full functionality
+
+**Solution**: 
+- Start backend service on `http://localhost:8080`
+- Or use mocked API responses in tests (already implemented)
+- Note: CI/CD tests use `continue-on-error: true` if backend unavailable
+
+#### 3. Port Conflicts
+**Problem**: Port 5173 already in use
+
+**Solution**:
+```bash
+# Check what's using port 5173
+lsof -i :5173
+
+# Kill the process or use a different port
+# Update cypress.config.ts if using different port
+```
+
+#### 4. Test Timeouts
+**Problem**: Tests timeout waiting for elements or API calls
+
+**Solution**:
+- Increase timeout in test: `cy.wait('@apiCall', { timeout: 10000 })`
+- Check if selectors match actual component structure
+- Verify API intercepts are correctly configured
+
+#### 5. LocalStorage State
+**Problem**: Tests fail due to leftover localStorage state
+
+**Solution**: Tests automatically clear localStorage, but if issues persist:
+```bash
+# Clear browser storage manually
+# Or check test setup in cypress/support/e2e.ts
+```
+
+### E2E Test Debugging
+
+```bash
+# Run tests in interactive mode to debug
+npm run cy:open
+
+# Run specific test file
+npx cypress run --spec "cypress/e2e/auth.cy.ts"
+
+# Run with browser visible
+npx cypress run --headed
+```
+
+**See [TESTING.md](./TESTING.md) for complete testing guide including E2E testing.**
+
+---
+
+## Problem: Unit Tests Failing
+
+### Symptoms
+- Tests fail with mock errors
+- Coverage not generating
+- Tests pass locally but fail in CI
+
+### Solutions
+
+#### 1. Mock Setup Issues
+**Problem**: Axios or router mocks not working correctly
+
+**Solution**: 
+- Ensure mocks are defined before imports (Vitest hoisting)
+- Check `vi.mock()` factory functions don't reference external variables
+- Verify mock structure matches actual implementation
+
+#### 2. Coverage Not Generating
+**Problem**: Coverage report not created
+
+**Solution**:
+```bash
+# Ensure coverage package is installed
+npm list @vitest/coverage-v8
+
+# Reinstall if needed
+npm install --save-dev @vitest/coverage-v8
+
+# Generate coverage
+npm run coverage
+```
+
+#### 3. Tests Fail in CI but Pass Locally
+**Problem**: Environment differences
+
+**Solution**:
+- Check Node.js version matches CI (Node 20)
+- Run `npm ci` instead of `npm install` to match CI
+- Check for environment-specific code paths
+
+**See [TESTING.md](./TESTING.md) for detailed testing guide.**
+
