@@ -1,4 +1,3 @@
-import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import type {
   DeploymentResponse,
   HistoricProcessInstance,
@@ -8,6 +7,7 @@ import type {
   RefreshTokenRequest,
   Task,
 } from '@/types/workflow';
+import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: '/api',
@@ -178,7 +178,7 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     // Try to update time offset from error response too
-    // @ts-ignore - headers index type
+    // @ts-expect-error - headers index type
     if (error.response?.headers) updateServerTimeOffsetFromHeaders(error.response.headers);
 
     // Do not log or refresh on logout endpoint errors; just reject
@@ -277,7 +277,7 @@ export async function logout(refreshToken?: string): Promise<void> {
     }
 
     const res = await apiClient.post('/auth/logout', refreshToken ? { refreshToken } : null);
-    // @ts-ignore - headers index type
+    // @ts-expect-error - headers index type
     updateServerTimeOffsetFromHeaders(res.headers);
   } catch (_error) {
     // Intentionally ignore errors on logout to avoid noisy 4xx logs.
