@@ -1,1 +1,10 @@
 node_modules/
+dist/
+coverage/
+.vscode/settings.json
+# Keep .vscode/settings.json template but ignore actual token
+# Use environment variable SONAR_TOKEN instead
+*.log
+.DS_Store
+reports/
+.scannerwork/
