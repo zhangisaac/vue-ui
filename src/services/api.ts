@@ -157,12 +157,12 @@ apiClient.interceptors.request.use(
       }
     }
 
-    if (token) {
-      config.headers = config.headers ?? {};
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+  if (token) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
 
-    return config;
+  return config;
   },
   (error) => Promise.reject(error),
 );
@@ -226,7 +226,7 @@ apiClient.interceptors.response.use(
         window.dispatchEvent(new CustomEvent('auth:logout', { detail: { reason: 'token_refresh_failed' } }));
         
         return Promise.reject(error);
-      }
+    }
     }
 
     // Log detailed error for debugging
