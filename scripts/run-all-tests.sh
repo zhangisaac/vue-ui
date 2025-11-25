@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Integrated Test Runner - Runs all tests (Unit + E2E) with coverage
-# Usage: ./scripts/run-all-tests.sh [--skip-e2e] [--skip-unit] [--coverage-only]
+# Integrated Test Runner - Runs all tests (Unit + E2E) with coverage and SonarCloud analysis
+# Usage: ./scripts/run-all-tests.sh [--skip-e2e] [--skip-unit] [--coverage-only] [--skip-sonar]
 
 set -e  # Exit on error
 
@@ -16,6 +16,7 @@ NC='\033[0m' # No Color
 SKIP_E2E=false
 SKIP_UNIT=false
 COVERAGE_ONLY=false
+SKIP_SONAR=false
 
 for arg in "$@"; do
   case $arg in
@@ -29,6 +30,10 @@ for arg in "$@"; do
       ;;
     --coverage-only)
       COVERAGE_ONLY=true
+      shift
+      ;;
+    --skip-sonar)
+      SKIP_SONAR=true
       shift
       ;;
     *)
@@ -115,6 +120,32 @@ else
   echo ""
 fi
 
+# Run SonarCloud Analysis
+if [ "$SKIP_SONAR" = false ]; then
+  echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${BLUE}Running SonarCloud Analysis${NC}"
+  echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo ""
+  
+  # Ensure coverage exists (sonar:local will generate it if needed)
+  if [ ! -f "coverage/lcov.info" ] && [ "$SKIP_UNIT" = false ]; then
+    echo -e "${YELLOW}Coverage report not found. Generating coverage first...${NC}"
+    npm run coverage
+  fi
+  
+  npm run sonar:local
+  
+  if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✓ SonarCloud analysis completed${NC}"
+  else
+    echo -e "${YELLOW}⚠ SonarCloud analysis had issues (continuing anyway)${NC}"
+  fi
+  echo ""
+else
+  echo -e "${YELLOW}⏭ Skipping SonarCloud analysis${NC}"
+  echo ""
+fi
+
 # Run E2E Tests
 if [ "$SKIP_E2E" = false ]; then
   echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -157,5 +188,12 @@ if [ "$COVERAGE_ONLY" = true ] || [ "$SKIP_UNIT" = false ]; then
     echo -e "${YELLOW}To view: open coverage/index.html${NC}"
     echo ""
   fi
+fi
+
+# Show SonarCloud dashboard link if analysis was run
+if [ "$SKIP_SONAR" = false ]; then
+  echo -e "${GREEN}SonarCloud dashboard:${NC}"
+  echo -e "${BLUE}  https://sonarcloud.io/project/overview?id=zhangisaac_vue-ui${NC}"
+  echo ""
 fi
 
